@@ -12,4 +12,5 @@ assert.match(read('LumaLex/Info.plist'), /<key>UILaunchScreen<\/key>\s*<dict\s*\
 const project = read('project.yml');
 assert.match(project, /- Views\/Assessment\/\*\*/);
 assert.match(project, /- Services\/Assessment\/\*\*/);
+assert.match(project, /UILaunchScreen:\s*\{\}/);
 console.log('Assessment removal and launch screen configuration checks passed.');

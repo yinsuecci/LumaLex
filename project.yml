@@ -22,6 +22,8 @@ targets:
         buildPhase: resources
     info:
       path: LumaLex/Info.plist
+      properties:
+        UILaunchScreen: {}
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumalex.app
