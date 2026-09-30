@@ -25,6 +25,13 @@ targets:
       properties:
         UILaunchScreen: {}
         CFBundleVersion: "3"
+        CFBundleDisplayName: LumaLex
+        LSRequiresIPhoneOS: true
+        UIBackgroundModes: [audio]
+        NSSpeechRecognitionUsageDescription: LumaLex uses on-device speech recognition to create timed subtitles for imported audio.
+        NSSupportsLiveActivities: true
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumalex.app
@@ -42,6 +49,11 @@ targets:
       - path: LumaLex/LiveActivity/LumaLexActivityAttributes.swift
     info:
       path: Widgets/Info.plist
+      properties:
+        CFBundleDisplayName: LumaLex
+        CFBundleVersion: "3"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumalex.app.widgets

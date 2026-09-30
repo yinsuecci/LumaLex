@@ -20,6 +20,7 @@ jobs:
         run: xcodebuild build -project LumaLex.xcodeproj -scheme LumaLex -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/iphone-build" CODE_SIGNING_ALLOWED=NO
       - name: Package unsigned IPA
         run: |
+          python3 -c 'import os, plistlib, pathlib; root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "iphone-build/Build/Products/Debug-iphoneos/LumaLex.app"; app = plistlib.loads((root / "Info.plist").read_bytes()); widget = plistlib.loads((root / "PlugIns/LumaLexWidgets.appex/Info.plist").read_bytes()); assert app["UILaunchScreen"] == {}; assert app["UIBackgroundModes"] == ["audio"]; assert widget["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"; assert app["CFBundleVersion"] == widget["CFBundleVersion"]'
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$RUNNER_TEMP/iphone-build/Build/Products/Debug-iphoneos/LumaLex.app" "$RUNNER_TEMP/ipa/Payload/"
           cd "$RUNNER_TEMP/ipa"
