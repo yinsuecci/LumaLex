@@ -16,6 +16,8 @@ targets:
         excludes:
           - Info.plist
           - Resources/**
+          - Views/Assessment/**
+          - Services/Assessment/**
       - path: LumaLex/Resources/Demo.wav
         buildPhase: resources
     info:

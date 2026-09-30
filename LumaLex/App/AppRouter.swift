@@ -4,15 +4,11 @@ import SwiftUI
 struct AppRouter: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var player: AudioPlayerService
-    @Query private var profiles: [UserProfile]
     @State private var showingPlayer = false
     @State private var setupError: String?
 
     var body: some View {
-        Group {
-            if profiles.isEmpty { AssessmentView() }
-            else { mainTabs }
-        }
+        mainTabs
         .task {
             do { try DemoContentSeeder.seedIfNeeded(in: modelContext) }
             catch { setupError = error.localizedDescription }

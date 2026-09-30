@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node tools/virtual-assessment.mjs --self-test && node tools/check-demo.mjs && npm test --prefix server"
+    "test": "node tools/check-app-config.mjs && node tools/check-demo.mjs && npm test --prefix server"
   },
   "engines": {
     "node": ">=20"

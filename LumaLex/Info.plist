@@ -28,6 +28,8 @@
     <string>LumaLex uses on-device speech recognition to create timed subtitles for imported audio.</string>
     <key>NSSupportsLiveActivities</key>
     <true/>
+    <key>UILaunchScreen</key>
+    <dict/>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

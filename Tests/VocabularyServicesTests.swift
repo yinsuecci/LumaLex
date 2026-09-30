@@ -44,12 +44,4 @@ final class VocabularyServicesTests: XCTestCase {
         XCTAssertNil(DemoVocabularyExplanation.lookup("price in", audioID: UUID()))
     }
 
-    func testAssessmentIsMonotonicAcrossBands() {
-        let engine = InitialVocabularyAssessmentEngine()
-        let low = engine.estimate(knownWords: ["house"])
-        let high = engine.estimate(knownWords: Set(engine.words.map(\.word)))
-        XCTAssertEqual(low.vocabularySize, 550)
-        XCTAssertEqual(high.vocabularySize, 12500)
-        XCTAssertGreaterThan(high.vocabularySize, low.vocabularySize)
-    }
 }

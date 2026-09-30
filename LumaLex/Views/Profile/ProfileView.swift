@@ -14,18 +14,12 @@ struct ProfileView: View {
     @AppStorage("backendURL") private var backendURL = ""
     @AppStorage("lockScreenSubtitles") private var lockScreenSubtitles = false
     @State private var backendToken = ""
-    @State private var showingAssessment = false
     @State private var confirmDelete = false
     @State private var errorMessage: String?
 
     var body: some View {
         List {
-            Section("Vocabulary Estimate") {
-                if let profile = profiles.first {
-                    LabeledContent("Estimated vocabulary", value: profile.estimatedVocabulary.formatted())
-                    LabeledContent("Assessed", value: profile.assessmentDate.formatted(date: .abbreviated, time: .omitted))
-                }
-                Button("Retake Vocabulary Check") { showingAssessment = true }
+            Section("Vocabulary") {
                 NavigationLink("Known Words") { KnownExpressionsView() }
             }
             Section("Optional AI Server") {
@@ -48,7 +42,6 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .onAppear { backendToken = BackendConfiguration.token ?? "" }
         .onChange(of: lockScreenSubtitles) { _, _ in player.refreshLockScreenPresentation() }
-        .sheet(isPresented: $showingAssessment) { AssessmentView() }
         .confirmationDialog("Delete all audio, transcripts, known words, vocabulary, and review history?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Everything", role: .destructive) { deleteAll() }

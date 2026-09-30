@@ -17,7 +17,19 @@ jobs:
       - name: Generate project
         run: xcodegen generate
       - name: Build for iPhone SDK
-        run: xcodebuild build -project LumaLex.xcodeproj -scheme LumaLex -destination 'generic/platform=iOS' CODE_SIGNING_ALLOWED=NO
+        run: xcodebuild build -project LumaLex.xcodeproj -scheme LumaLex -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/iphone-build" CODE_SIGNING_ALLOWED=NO
+      - name: Package unsigned IPA
+        run: |
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/iphone-build/Build/Products/Debug-iphoneos/LumaLex.app" "$RUNNER_TEMP/ipa/Payload/"
+          cd "$RUNNER_TEMP/ipa"
+          zip -qr LumaLex-unsigned.ipa Payload
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: LumaLex-unsigned
+          path: ${{ runner.temp }}/ipa/LumaLex-unsigned.ipa
+          if-no-files-found: error
       - name: Select simulator
         id: simulator
         run: |
