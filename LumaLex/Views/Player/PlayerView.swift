@@ -29,6 +29,8 @@ struct PlayerView: View {
     @State private var confirmTranslation = false
     @State private var errorMessage: String?
     @State private var selectedWord: SelectedWord?
+    @State private var savedSegments: [SubtitleSegment]?
+    @State private var importMessage: String?
     let documentID: UUID
 
     private var document: AudioDocument? { documents.first { $0.id == documentID } }
@@ -36,6 +38,7 @@ struct PlayerView: View {
         transcripts.filter { $0.audioDocumentID == documentID }.max { $0.createdAt < $1.createdAt }
     }
     private var segments: [SubtitleSegment] {
+        if let savedSegments { return savedSegments }
         guard let transcript else { return [] }
         return allSegments.filter { $0.transcriptID == transcript.id }.sorted { $0.startTime < $1.startTime }
     }
@@ -96,6 +99,11 @@ struct PlayerView: View {
                         .padding(.horizontal, 20)
                     }
                     .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in following = false })
+                    .task(id: segments.map(\.id)) {
+                        if following, let activeIndex {
+                            proxy.scrollTo(activeIndex, anchor: .center)
+                        }
+                    }
                     .onChange(of: activeIndex) { _, index in
                         if following, let index {
                             withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(index, anchor: .center) }
@@ -143,8 +151,14 @@ struct PlayerView: View {
         .fileImporter(isPresented: $importingTranscript,
                       allowedContentTypes: [.plainText, UTType(filenameExtension: "srt") ?? .plainText,
                                             UTType(filenameExtension: "vtt") ?? .plainText]) { result in
-            guard case .success(let url) = result else { return }
-            importTranscript(url)
+            switch result {
+            case .success(let url): importTranscript(url)
+            case .failure(let error):
+                let value = error as NSError
+                if value.domain != NSCocoaErrorDomain || value.code != NSUserCancelledError {
+                    errorMessage = error.localizedDescription
+                }
+            }
         }
         .sheet(item: $selectedWord) { selection in
             VocabularySheet(word: selection.value, sentence: selection.sentence,
@@ -154,6 +168,10 @@ struct PlayerView: View {
                                                                  set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+        .alert("Subtitles Imported", isPresented: Binding(get: { importMessage != nil },
+                                                          set: { if !$0 { importMessage = nil } })) {
+            Button("OK", role: .cancel) { importMessage = nil }
+        } message: { Text(importMessage ?? "") }
         .onAppear {
             if let document { player.load(document) }
             player.setSubtitles(segments)
@@ -225,6 +243,8 @@ struct PlayerView: View {
             let parsed = TranscriptParser.parse(text)
             guard !parsed.isEmpty else { throw TranscriptImportError.noTimedSegments }
             try saveTranscript(parsed, source: "imported")
+            mode = .bilingual
+            importMessage = "Imported \(parsed.count) timed subtitles for this audio."
         } catch {
             modelContext.rollback()
             errorMessage = error.localizedDescription
@@ -286,13 +306,18 @@ struct PlayerView: View {
     private func saveTranscript(_ parsed: [ParsedSubtitle], source: String) throws {
         let transcript = Transcript(audioDocumentID: documentID, source: source)
         modelContext.insert(transcript)
+        var inserted: [SubtitleSegment] = []
         for item in parsed {
-            modelContext.insert(SubtitleSegment(transcriptID: transcript.id, startTime: item.start,
+            let segment = SubtitleSegment(transcriptID: transcript.id, startTime: item.start,
                                                 endTime: item.end, english: item.english,
                                                 chinese: item.chinese,
-                                                tokens: item.english.split(separator: " ").map(String.init)))
+                                                tokens: item.english.split(separator: " ").map(String.init))
+            modelContext.insert(segment)
+            inserted.append(segment)
         }
         try modelContext.save()
+        savedSegments = inserted.sorted { $0.startTime < $1.startTime }
+        player.setSubtitles(savedSegments ?? [])
         following = true
     }
 }

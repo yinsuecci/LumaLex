@@ -24,6 +24,7 @@ targets:
       path: LumaLex/Info.plist
       properties:
         UILaunchScreen: {}
+        CFBundleVersion: "3"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.lumalex.app
