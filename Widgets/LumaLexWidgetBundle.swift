@@ -12,9 +12,9 @@ private struct LumaLexLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: LumaLexActivityAttributes.self) { context in
             VStack(alignment: .leading, spacing: 8) {
-                Text(context.state.english).font(.headline).lineLimit(2)
+                Text(context.state.english).font(.subheadline).lineLimit(3)
                 if !context.state.chinese.isEmpty {
-                    Text(context.state.chinese).font(.subheadline).lineLimit(2)
+                    Text(context.state.chinese).font(.subheadline).lineLimit(3)
                 }
                 Divider()
                 HStack {

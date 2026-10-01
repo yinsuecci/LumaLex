@@ -1,11 +1,12 @@
 import ActivityKit
 import Foundation
+import UIKit
 
 @MainActor
 final class LiveActivityCoordinator {
     private var activity: Activity<LumaLexActivityAttributes>?
-    private var lastUpdate = Date.distantPast
     private var lastEnglish = ""
+    private var lastChinese = ""
     private var lastIsPlaying = false
 
     @discardableResult
@@ -15,13 +16,14 @@ final class LiveActivityCoordinator {
               ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
         guard activity != nil || isPlaying else { return false }
         let now = Date()
-        guard (english != lastEnglish && now.timeIntervalSince(lastUpdate) >= 15) ||
+        guard activity == nil || english != lastEnglish || chinese != lastChinese ||
                 isPlaying != lastIsPlaying else { return false }
+        if activity == nil, UIApplication.shared.applicationState != .active { return false }
         lastEnglish = english
+        lastChinese = chinese
         lastIsPlaying = isPlaying
-        lastUpdate = now
         let state = LumaLexActivityAttributes.ContentState(
-            english: String(english.prefix(220)), chinese: String(chinese.prefix(160)),
+            english: String(english.prefix(500)), chinese: String(chinese.prefix(300)),
             elapsed: Int(elapsed), isPlaying: isPlaying
         )
         let content = ActivityContent(state: state, staleDate: now.addingTimeInterval(90))
@@ -34,13 +36,13 @@ final class LiveActivityCoordinator {
     }
 
     func end() {
+        let previous = activity
         self.activity = nil
         lastEnglish = ""
+        lastChinese = ""
         lastIsPlaying = false
         Task {
-            for activity in Activity<LumaLexActivityAttributes>.activities {
-                await activity.end(nil, dismissalPolicy: .immediate)
-            }
+            await previous?.end(nil, dismissalPolicy: .immediate)
         }
     }
 }

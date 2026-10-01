@@ -28,7 +28,7 @@ targets:
       path: LumaLex/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleVersion: "4"
+        CFBundleVersion: "5"
         CFBundleDisplayName: LumaLex
         LSRequiresIPhoneOS: true
         UIBackgroundModes: [audio]
@@ -55,7 +55,7 @@ targets:
       path: Widgets/Info.plist
       properties:
         CFBundleDisplayName: LumaLex
-        CFBundleVersion: "4"
+        CFBundleVersion: "5"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

@@ -16,6 +16,7 @@ struct ReviewView: View {
     }
 
     var body: some View {
+        ScrollView {
         VStack(spacing: 24) {
             if let word = currentWord {
                 Text("\(currentIndex + 1) / \(queue.count)")
@@ -23,7 +24,7 @@ struct ReviewView: View {
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                Spacer()
+                Spacer(minLength: 24)
                 Text(word.word)
                     .font(.largeTitle.bold())
                     .multilineTextAlignment(.center)
@@ -44,31 +45,35 @@ struct ReviewView: View {
                     .multilineTextAlignment(.center)
                     .accessibilityElement(children: .combine)
                 }
-                Spacer()
-
-                if isRevealed {
-                    HStack {
-                        Button("Forgot") { record(.forgot, for: word) }
-                            .buttonStyle(.bordered)
-                            .frame(maxWidth: .infinity)
-                        Button("Remember") { record(.remembered, for: word) }
-                            .buttonStyle(.borderedProminent)
-                            .frame(maxWidth: .infinity)
-                    }
-                } else {
-                    Button("Reveal") {
-                        isRevealed = true
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .frame(maxWidth: .infinity)
-                }
             } else {
                 ContentUnavailableView("Review Complete", systemImage: "checkmark.circle",
                                        description: Text("There are no more words due in this session."))
             }
         }
         .padding(24)
+        }
+        .safeAreaInset(edge: .bottom) {
+            if let word = currentWord {
+                HStack {
+                    if isRevealed {
+                        Button("Forgot") { record(.forgot, for: word) }
+                            .buttonStyle(.bordered)
+                        Button("Remember") { record(.remembered, for: word) }
+                            .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Reveal") {
+                            isRevealed = true
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .controlSize(.large)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(.regularMaterial)
+            }
+        }
         .navigationTitle("Review")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: prepareQueue)

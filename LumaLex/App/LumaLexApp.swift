@@ -5,6 +5,14 @@ import SwiftUI
 struct LumaLexApp: App {
     @StateObject private var player = AudioPlayerService()
 
+    init() {
+        let defaults = UserDefaults.standard
+        if !defaults.bool(forKey: "enabledBilingualLockScreenV5") {
+            defaults.set(true, forKey: "lockScreenSubtitles")
+            defaults.set(true, forKey: "enabledBilingualLockScreenV5")
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             AppRouter()

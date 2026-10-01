@@ -23,26 +23,26 @@ struct AppRouter: View {
         TabView {
             NavigationStack {
                 TodayView()
+                    .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             .tabItem { Label("Today", systemImage: "sun.max") }
 
             NavigationStack {
                 LibraryView()
+                    .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             .tabItem { Label("Library", systemImage: "books.vertical") }
 
             NavigationStack {
                 VocabularyView()
+                    .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             .tabItem { Label("Vocabulary", systemImage: "text.book.closed") }
 
             NavigationStack {
                 ProfileView()
+                    .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { miniPlayer }
             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
         .sheet(isPresented: $showingPlayer) {

@@ -17,6 +17,7 @@ final class AudioPlayerService: ObservableObject {
     private var timeObserver: Any?
     private var subtitles: [ParsedSubtitle] = []
     private var lastSubtitleIndex: Int?
+    private var lastMetadataSubtitleIndex: Int?
     private let liveActivity = LiveActivityCoordinator()
 
     init() {
@@ -90,6 +91,7 @@ final class AudioPlayerService: ObservableObject {
         currentTime = 0
         subtitles = []
         lastSubtitleIndex = nil
+        lastMetadataSubtitleIndex = nil
         liveActivity.end()
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
     }
@@ -98,10 +100,12 @@ final class AudioPlayerService: ObservableObject {
         subtitles = segments.map { ParsedSubtitle(start: $0.startTime, end: $0.endTime,
                                                    english: $0.english, chinese: $0.chinese) }
         lastSubtitleIndex = nil
+        lastMetadataSubtitleIndex = nil
         updateSubtitleActivity()
     }
 
     func refreshLockScreenPresentation() {
+        updateNowPlaying()
         if UserDefaults.standard.bool(forKey: "lockScreenSubtitles") {
             lastSubtitleIndex = nil
             updateSubtitleActivity(force: true)
@@ -111,7 +115,12 @@ final class AudioPlayerService: ObservableObject {
     }
 
     private func updateSubtitleActivity(force: Bool = false) {
-        guard let index = TranscriptParser.activeIndex(at: currentTime, in: subtitles),
+        let active = TranscriptParser.activeIndex(at: currentTime, in: subtitles)
+        if active != lastMetadataSubtitleIndex || force {
+            lastMetadataSubtitleIndex = active
+            updateNowPlaying()
+        }
+        guard let index = active,
               index != lastSubtitleIndex || force else { return }
         let segment = subtitles[index]
         if liveActivity.update(title: title, english: segment.english, chinese: segment.chinese,
@@ -122,12 +131,21 @@ final class AudioPlayerService: ObservableObject {
 
     private func updateNowPlaying() {
         guard documentID != nil else { return }
-        MPNowPlayingInfoCenter.default().nowPlayingInfo = [
+        let active = TranscriptParser.activeIndex(at: currentTime, in: subtitles)
+        let subtitle = active.map { subtitles[$0] }
+        let showSubtitles = UserDefaults.standard.bool(forKey: "lockScreenSubtitles")
+        var info: [String: Any] = [
             MPMediaItemPropertyTitle: title,
             MPMediaItemPropertyPlaybackDuration: duration,
             MPNowPlayingInfoPropertyElapsedPlaybackTime: currentTime,
             MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? rate : 0
         ]
+        if showSubtitles, let subtitle {
+            info[MPMediaItemPropertyTitle] = subtitle.english.isEmpty ? title : subtitle.english
+            info[MPMediaItemPropertyArtist] = subtitle.chinese
+            info[MPMediaItemPropertyAlbumTitle] = title
+        }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
     }
 
     private func configureRemoteCommands() {
