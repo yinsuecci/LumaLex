@@ -22,6 +22,17 @@ struct ProfileView: View {
             Section("Vocabulary") {
                 NavigationLink("Known Words") { KnownExpressionsView() }
             }
+            Section("Offline Dictionary") {
+                Text("ECDICT · 50,000 entries")
+                Text("Dictionary definitions are general meanings, not AI-selected meanings in context.")
+                    .font(.footnote).foregroundStyle(.secondary)
+                NavigationLink("Dictionary License") {
+                    ScrollView {
+                        Text(dictionaryLicense).font(.footnote).padding()
+                    }
+                    .navigationTitle("ECDICT License")
+                }
+            }
             Section("Optional AI Server") {
                 TextField("https://api.example.com", text: $backendURL)
                     .textInputAutocapitalization(.never)
@@ -74,5 +85,11 @@ struct ProfileView: View {
             modelContext.rollback()
             errorMessage = error.localizedDescription
         }
+    }
+
+    private var dictionaryLicense: String {
+        guard let url = Bundle.main.url(forResource: "ECDICT-LICENSE", withExtension: "txt"),
+              let text = try? String(contentsOf: url, encoding: .utf8) else { return "License unavailable" }
+        return text
     }
 }

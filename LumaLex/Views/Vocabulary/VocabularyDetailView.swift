@@ -16,7 +16,15 @@ struct VocabularyDetailView: View {
                 if let pronunciation = item.pronunciation { Text(pronunciation).foregroundStyle(.secondary) }
                 Text(item.chineseMeaning)
                 if !item.englishDefinition.isEmpty { Text(item.englishDefinition).foregroundStyle(.secondary) }
+                if let source = item.dictionarySource {
+                    Text("Dictionary: \(source)").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            Section("Original Example") {
                 Text(item.originalSentence).italic()
+                if let translation = item.originalTranslation, !translation.isEmpty {
+                    Text(translation).foregroundStyle(.secondary)
+                }
             }
             Section("Progress") {
                 LabeledContent("Status", value: item.status == .learned ? "Learned" : "Learning")

@@ -2,6 +2,7 @@ import AVKit
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+import UIKit
 
 enum SubtitleMode: String, CaseIterable, Identifiable {
     case bilingual = "Bilingual"
@@ -28,7 +29,7 @@ struct PlayerView: View {
     @State private var confirmRemoteTranscription = false
     @State private var confirmTranslation = false
     @State private var errorMessage: String?
-    @State private var selectedWord: SelectedWord?
+    @State private var vocabularyMessage: String?
     @State private var savedSegments: [SubtitleSegment]?
     @State private var importMessage: String?
     let documentID: UUID
@@ -54,6 +55,10 @@ struct PlayerView: View {
         VStack(spacing: 16) {
             if let document {
                 Text(document.title).font(.title2.bold()).multilineTextAlignment(.center)
+            }
+            if let vocabularyMessage {
+                Text(vocabularyMessage).font(.caption).foregroundStyle(.secondary)
+                    .accessibilityLabel(vocabularyMessage)
             }
 
             if mode == .focus {
@@ -90,8 +95,11 @@ struct PlayerView: View {
                                             isActive: index == activeIndex,
                                             difficultyContext: difficultyContext,
                                             savedPhrases: Set(vocabulary.filter { $0.lemma.contains(" ") }
-                                                .map { $0.lemma.lowercased() })) { word in
-                                    selectedWord = SelectedWord(value: word, sentence: segments[index].english)
+                                                .map { $0.lemma.lowercased() }),
+                                            savedLemmas: Set(vocabulary.map {
+                                                OfflineDictionary.shared.lemma(for: $0.lemma)
+                                            })) { word in
+                                    addWord(word, from: segments[index])
                                 }
                                 .id(index)
                             }
@@ -159,10 +167,6 @@ struct PlayerView: View {
                     errorMessage = error.localizedDescription
                 }
             }
-        }
-        .sheet(item: $selectedWord) { selection in
-            VocabularySheet(word: selection.value, sentence: selection.sentence,
-                            audioID: documentID)
         }
         .alert("Could Not Complete Action", isPresented: Binding(get: { errorMessage != nil },
                                                                  set: { if !$0 { errorMessage = nil } })) {
@@ -235,6 +239,37 @@ struct PlayerView: View {
     private func time(_ seconds: TimeInterval) -> String {
         let value = Int(max(0, seconds))
         return String(format: "%d:%02d", value / 60, value % 60)
+    }
+
+    private func addWord(_ word: String, from segment: SubtitleSegment) {
+        let dictionary = OfflineDictionary.shared
+        let lemma = dictionary.lemma(for: word)
+        do {
+            let existing = try modelContext.fetch(FetchDescriptor<VocabularyItem>())
+            guard !existing.contains(where: { dictionary.lemma(for: $0.lemma) == lemma }) else {
+                vocabularyMessage = "Already saved: \(word)"
+                return
+            }
+            let entry = dictionary.lookup(word)
+            let state = ReviewScheduler.initial(at: .now)
+            let item = VocabularyItem(word: word, lemma: lemma,
+                                      pronunciation: entry?.phonetic,
+                                      partOfSpeech: entry?.pos,
+                                      chineseMeaning: entry?.translation.replacingOccurrences(of: "\\n", with: "\n") ?? "暂无词典释义",
+                                      englishDefinition: entry?.definition.replacingOccurrences(of: "\\n", with: "\n") ?? "",
+                                      originalSentence: segment.english, sourceAudioID: documentID,
+                                      reviewStage: state.stage, nextReviewDate: state.nextReviewDate)
+            item.originalTranslation = segment.chinese
+            item.originalStartTime = segment.startTime
+            item.dictionarySource = entry == nil ? nil : "ECDICT (offline)"
+            modelContext.insert(item)
+            try modelContext.save()
+            vocabularyMessage = entry == nil ? "Saved \(word); no offline entry" : "Saved: \(word)"
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+        } catch {
+            modelContext.rollback()
+            vocabularyMessage = "Could not save: \(error.localizedDescription)"
+        }
     }
 
     private func importTranscript(_ url: URL) {
@@ -320,12 +355,6 @@ struct PlayerView: View {
         player.setSubtitles(savedSegments ?? [])
         following = true
     }
-}
-
-private struct SelectedWord: Identifiable {
-    let value: String
-    let sentence: String
-    var id: String { value + sentence }
 }
 
 private enum TranscriptImportError: LocalizedError {

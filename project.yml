@@ -20,11 +20,15 @@ targets:
           - Services/Assessment/**
       - path: LumaLex/Resources/Demo.wav
         buildPhase: resources
+      - path: LumaLex/Resources/OfflineDictionary.json
+        buildPhase: resources
+      - path: LumaLex/Resources/ECDICT-LICENSE.txt
+        buildPhase: resources
     info:
       path: LumaLex/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleVersion: "3"
+        CFBundleVersion: "4"
         CFBundleDisplayName: LumaLex
         LSRequiresIPhoneOS: true
         UIBackgroundModes: [audio]
@@ -51,7 +55,7 @@ targets:
       path: Widgets/Info.plist
       properties:
         CFBundleDisplayName: LumaLex
-        CFBundleVersion: "3"
+        CFBundleVersion: "4"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

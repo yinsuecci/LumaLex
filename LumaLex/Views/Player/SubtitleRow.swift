@@ -6,6 +6,7 @@ struct SubtitleRow: View {
     let isActive: Bool
     let difficultyContext: DifficultyContext
     let savedPhrases: Set<String>
+    let savedLemmas: Set<String>
     let selectWord: (String) -> Void
 
     private let difficulty = HeuristicVocabularyDifficultyService()
@@ -19,16 +20,20 @@ struct SubtitleRow: View {
                 ForEach(words.indices, id: \.self) { index in
                     let raw = words[index].display
                     let word = words[index].lookup
-                    Button {
-                        if !word.isEmpty { selectWord(word) }
-                    } label: {
                         Text(raw)
                             .font(.body)
                             .fontWeight(emphasize(word) ? .semibold : .regular)
                             .foregroundStyle(emphasize(word) ? Color.accentColor : .primary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(word.isEmpty)
+                            .padding(.horizontal, 2)
+                            .background(isSaved(word) ? Color.accentColor.opacity(0.14) : Color.clear)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .contentShape(Rectangle())
+                            .onTapGesture(count: 2) { if !word.isEmpty { selectWord(word) } }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityHint("Double-tap to add to Vocabulary")
+                            .accessibilityAction(named: "Add to Vocabulary") {
+                                if !word.isEmpty { selectWord(word) }
+                            }
                 }
             }
             if mode == .bilingual, !segment.chinese.isEmpty {
@@ -42,8 +47,12 @@ struct SubtitleRow: View {
     }
 
     private func emphasize(_ word: String) -> Bool {
-        mode == .difficult && [VocabularyDifficulty.difficult, .specialized]
-            .contains(difficulty.classify(word, context: difficultyContext))
+        isSaved(word) || (mode == .difficult && [VocabularyDifficulty.difficult, .specialized]
+            .contains(difficulty.classify(word, context: difficultyContext)))
+    }
+
+    private func isSaved(_ word: String) -> Bool {
+        savedLemmas.contains(OfflineDictionary.shared.lemma(for: word))
     }
 }
 

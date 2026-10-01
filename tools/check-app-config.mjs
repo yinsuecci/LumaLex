@@ -22,4 +22,14 @@ assert.match(player, /try modelContext\.save\(\)\s*savedSegments = inserted\.sor
 assert.match(player, /player\.setSubtitles\(savedSegments \?\? \[\]\)/);
 assert.match(player, /try saveTranscript\(parsed, source: "imported"\)\s*mode = \.bilingual/);
 assert.match(player, /case \.failure\(let error\):/);
+assert.doesNotMatch(player, /sheet\(item: \$selectedWord/);
+assert.match(player, /originalSentence: segment\.english/);
+assert.match(player, /dictionarySource = entry == nil/);
+const row = read('LumaLex/Views/Player/SubtitleRow.swift');
+assert.match(row, /onTapGesture\(count: 2\)/);
+assert.match(row, /savedLemmas\.contains\(OfflineDictionary\.shared\.lemma/);
+assert.match(read('LumaLex/Views/Player/MiniPlayerView.swift'), /ProgressView/);
+const entries = JSON.parse(read('LumaLex/Resources/OfflineDictionary.json'));
+assert.ok(entries.length >= 40000);
+assert.ok(entries.some(entry => entry.word === 'house' && entry.translation));
 console.log('Assessment removal and launch screen configuration checks passed.');

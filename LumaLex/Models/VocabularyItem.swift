@@ -15,6 +15,9 @@ final class VocabularyItem {
     var chineseMeaning: String
     var englishDefinition: String
     var originalSentence: String
+    var originalTranslation: String? = nil
+    var originalStartTime: TimeInterval? = nil
+    var dictionarySource: String? = nil
     var sourceAudioID: UUID?
     var createdAt: Date
     var reviewStage: Int
