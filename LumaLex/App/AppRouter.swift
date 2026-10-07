@@ -5,20 +5,27 @@ struct AppRouter: View {
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject private var player: AudioPlayerService
     @Environment(\.scenePhase) private var scenePhase
+    @Query(sort: \AudioDocument.importedAt, order: .reverse) private var audio: [AudioDocument]
     @State private var showingPlayer = false
     @State private var setupError: String?
     @State private var importingBatch = false
+    @State private var mediaReady = false
 
     var body: some View {
         mainTabs
         .task {
-            do { try DemoContentSeeder.seedIfNeeded(in: modelContext) }
-            catch { setupError = error.localizedDescription }
-            await importBatch()
+            do {
+                try MediaCleanupService.clearExistingMediaOnce(in: modelContext)
+                try DemoContentSeeder.seedIfNeeded(in: modelContext)
+                mediaReady = true
+                player.setQueue(audio)
+                await importBatch()
+            } catch { setupError = error.localizedDescription }
         }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await importBatch() } }
+            if phase == .active && mediaReady { Task { await importBatch() } }
         }
+        .onChange(of: audio.map(\.id)) { _, _ in player.setQueue(audio) }
         .overlay {
             if importingBatch {
                 ProgressView("Importing audio and subtitles…")

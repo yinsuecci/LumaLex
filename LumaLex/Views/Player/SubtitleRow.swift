@@ -7,9 +7,9 @@ struct SubtitleRow: View {
     let difficultyContext: DifficultyContext
     let savedPhrases: Set<String>
     let savedLemmas: Set<String>
-    let selectWord: (String) -> Void
+    let toggleWord: (String) -> Void
 
-    private let difficulty = HeuristicVocabularyDifficultyService()
+    private static let difficulty = HeuristicVocabularyDifficultyService()
     private var words: [SubtitleToken] {
         SubtitleTokenizer.tokenize(segment.english, savedPhrases: savedPhrases)
     }
@@ -17,23 +17,29 @@ struct SubtitleRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             FlowLayout(spacing: 4) {
-                ForEach(words.indices, id: \.self) { index in
-                    let raw = words[index].display
-                    let word = words[index].lookup
-                        Text(raw)
-                            .font(.body)
-                            .fontWeight(emphasize(word) ? .semibold : .regular)
-                            .foregroundStyle(emphasize(word) ? Color.accentColor : .primary)
-                            .padding(.horizontal, 2)
-                            .background(isSaved(word) ? Color.accentColor.opacity(0.14) : Color.clear)
-                            .clipShape(RoundedRectangle(cornerRadius: 3))
-                            .contentShape(Rectangle())
-                            .onTapGesture(count: 2) { if !word.isEmpty { selectWord(word) } }
-                            .accessibilityAddTraits(.isButton)
-                            .accessibilityHint("Double-tap to add to Vocabulary")
-                            .accessibilityAction(named: "Add to Vocabulary") {
-                                if !word.isEmpty { selectWord(word) }
-                            }
+                let tokens = words
+                ForEach(tokens.indices, id: \.self) { index in
+                    let raw = tokens[index].display
+                    let word = tokens[index].lookup
+                    let saved = isSaved(word)
+                    let highlighted = saved || (mode == .difficult &&
+                        [VocabularyDifficulty.difficult, .specialized].contains(
+                            Self.difficulty.classify(word, context: difficultyContext)))
+                    Text(raw)
+                        .font(.body)
+                        .fontWeight(highlighted ? .semibold : .regular)
+                        .foregroundStyle(highlighted ? Color.accentColor : .primary)
+                        .padding(.horizontal, 2)
+                        .background(saved ? Color.accentColor.opacity(0.14) : Color.clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 3))
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) { if !word.isEmpty { toggleWord(word) } }
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityHint(Text(saved ? "Double-tap to remove from Vocabulary" :
+                            "Double-tap to add to Vocabulary"))
+                        .accessibilityAction(named: Text(saved ? "Remove from Vocabulary" : "Add to Vocabulary")) {
+                            if !word.isEmpty { toggleWord(word) }
+                        }
                 }
             }
             if mode == .bilingual, !segment.chinese.isEmpty {
@@ -44,11 +50,6 @@ struct SubtitleRow: View {
         .padding(.vertical, 8)
         .opacity(isActive ? 1 : 0.6)
         .accessibilityElement(children: .contain)
-    }
-
-    private func emphasize(_ word: String) -> Bool {
-        isSaved(word) || (mode == .difficult && [VocabularyDifficulty.difficult, .specialized]
-            .contains(difficulty.classify(word, context: difficultyContext)))
     }
 
     private func isSaved(_ word: String) -> Bool {

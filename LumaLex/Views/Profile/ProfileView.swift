@@ -15,6 +15,7 @@ struct ProfileView: View {
     @AppStorage("lockScreenSubtitles") private var lockScreenSubtitles = false
     @State private var backendToken = ""
     @State private var confirmDelete = false
+    @State private var confirmDeleteMedia = false
     @State private var errorMessage: String?
 
     var body: some View {
@@ -47,12 +48,17 @@ struct ProfileView: View {
                 Toggle("Show subtitles on Lock Screen", isOn: $lockScreenSubtitles)
                 Text("When enabled, the current sentence may appear in a Live Activity while audio plays.")
                     .font(.footnote).foregroundStyle(.secondary)
+                Button("Delete All Audio & Subtitles", role: .destructive) { confirmDeleteMedia = true }
                 Button("Delete All Local Data", role: .destructive) { confirmDelete = true }
             }
         }
         .navigationTitle("Profile")
         .onAppear { backendToken = BackendConfiguration.token ?? "" }
         .onChange(of: lockScreenSubtitles) { _, _ in player.refreshLockScreenPresentation() }
+        .confirmationDialog("Delete all audio and subtitles? Saved words and review history will remain.",
+                            isPresented: $confirmDeleteMedia, titleVisibility: .visible) {
+            Button("Delete Audio & Subtitles", role: .destructive) { deleteMedia() }
+        }
         .confirmationDialog("Delete all audio, transcripts, known words, vocabulary, and review history?",
                             isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Everything", role: .destructive) { deleteAll() }
@@ -61,6 +67,16 @@ struct ProfileView: View {
                                                               set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
+    }
+
+    private func deleteMedia() {
+        player.stop()
+        do {
+            try MediaCleanupService.deleteAll(in: modelContext)
+            UserDefaults.standard.set(true, forKey: "didSeedDemo")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func deleteAll() {

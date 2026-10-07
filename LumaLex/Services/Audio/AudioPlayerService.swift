@@ -15,6 +15,8 @@ final class AudioPlayerService: ObservableObject {
 
     private var player: AVPlayer?
     private var timeObserver: Any?
+    private var endObserver: NSObjectProtocol?
+    private var queue: [AudioDocument] = []
     private var subtitles: [ParsedSubtitle] = []
     private var lastSubtitleIndex: Int?
     private var lastMetadataSubtitleIndex: Int?
@@ -24,7 +26,11 @@ final class AudioPlayerService: ObservableObject {
         configureRemoteCommands()
     }
 
-    func load(_ document: AudioDocument) {
+    func setQueue(_ documents: [AudioDocument]) {
+        queue = documents
+    }
+
+    func load(_ document: AudioDocument, startAt position: TimeInterval? = nil) {
         if documentID == document.id { return }
         stop()
         let url = AudioStorage.url(for: document.localRelativePath)
@@ -33,29 +39,49 @@ final class AudioPlayerService: ObservableObject {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch { return }
-        let player = AVPlayer(url: url)
+        let item = AVPlayerItem(url: url)
+        let player = AVPlayer(playerItem: item)
         self.player = player
         documentID = document.id
         title = document.title
         duration = document.duration
-        seek(to: document.lastPlaybackTime)
+        seek(to: position ?? document.lastPlaybackTime)
         timeObserver = player.addPeriodicTimeObserver(
-            forInterval: CMTime(seconds: 0.25, preferredTimescale: 600), queue: .main
+            forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             Task { @MainActor in
                 guard time.seconds.isFinite else { return }
                 self?.currentTime = time.seconds
                 self?.updateSubtitleActivity()
-                if let self, self.isPlaying, self.duration > 0,
-                   time.seconds >= self.duration - 0.1 {
-                    self.player?.pause()
-                    self.isPlaying = false
-                    self.updateNowPlaying()
-                    self.updateSubtitleActivity(force: true)
-                }
+            }
+        }
+        let endingDocumentID = document.id
+        endObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard self?.documentID == endingDocumentID else { return }
+                self?.handlePlaybackEnded()
             }
         }
         updateNowPlaying()
+    }
+
+    private func handlePlaybackEnded() {
+        guard isPlaying, let documentID else { return }
+        if let index = queue.firstIndex(where: { $0.id == documentID }),
+           let next = queue.dropFirst(index + 1).first(where: {
+               FileManager.default.fileExists(atPath: AudioStorage.url(for: $0.localRelativePath).path)
+           }) {
+            load(next, startAt: 0)
+            togglePlayback()
+        } else {
+            player?.pause()
+            isPlaying = false
+            currentTime = duration
+            updateNowPlaying()
+            liveActivity.end()
+        }
     }
 
     func togglePlayback() {
@@ -84,6 +110,8 @@ final class AudioPlayerService: ObservableObject {
     func stop() {
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         timeObserver = nil
+        if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
+        endObserver = nil
         player?.pause()
         player = nil
         documentID = nil

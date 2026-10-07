@@ -32,17 +32,15 @@ struct PlayerView: View {
     @State private var vocabularyMessage: String?
     @State private var savedSegments: [SubtitleSegment]?
     @State private var importMessage: String?
+    @State private var didLoadInitialDocument = false
     let documentID: UUID
 
-    private var document: AudioDocument? { documents.first { $0.id == documentID } }
+    private var currentDocumentID: UUID { player.documentID ?? documentID }
+    private var document: AudioDocument? { documents.first { $0.id == currentDocumentID } }
     private var transcript: Transcript? {
-        transcripts.filter { $0.audioDocumentID == documentID }.max { $0.createdAt < $1.createdAt }
+        transcripts.filter { $0.audioDocumentID == currentDocumentID }.max { $0.createdAt < $1.createdAt }
     }
-    private var segments: [SubtitleSegment] {
-        if let savedSegments { return savedSegments }
-        guard let transcript else { return [] }
-        return allSegments.filter { $0.transcriptID == transcript.id }.sorted { $0.startTime < $1.startTime }
-    }
+    private var segments: [SubtitleSegment] { savedSegments ?? [] }
     private var activeIndex: Int? { SubtitleLookup.activeIndex(at: player.currentTime, in: segments) }
     private var difficultyContext: DifficultyContext {
         DifficultyContext(cefr: profiles.first?.cefrLevel ?? .b1,
@@ -90,16 +88,19 @@ struct PlayerView: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 24) {
+                            let context = difficultyContext
+                            let savedPhrases = Set(vocabulary.filter { $0.lemma.contains(" ") }
+                                .map { $0.lemma.lowercased() })
+                            let savedLemmas = Set(vocabulary.map {
+                                OfflineDictionary.shared.lemma(for: $0.lemma)
+                            })
                             ForEach(segments.indices, id: \.self) { index in
                                 SubtitleRow(segment: segments[index], mode: mode,
                                             isActive: index == activeIndex,
-                                            difficultyContext: difficultyContext,
-                                            savedPhrases: Set(vocabulary.filter { $0.lemma.contains(" ") }
-                                                .map { $0.lemma.lowercased() }),
-                                            savedLemmas: Set(vocabulary.map {
-                                                OfflineDictionary.shared.lemma(for: $0.lemma)
-                                            })) { word in
-                                    addWord(word, from: segments[index])
+                                            difficultyContext: context,
+                                            savedPhrases: savedPhrases,
+                                            savedLemmas: savedLemmas) { word in
+                                    toggleWord(word, from: segments[index])
                                 }
                                 .id(index)
                             }
@@ -107,7 +108,7 @@ struct PlayerView: View {
                         .padding(.horizontal, 20)
                     }
                     .simultaneousGesture(DragGesture(minimumDistance: 12).onChanged { _ in following = false })
-                    .task(id: segments.map(\.id)) {
+                    .task(id: segments.first?.id) {
                         if following, let activeIndex {
                             proxy.scrollTo(activeIndex, anchor: .center)
                         }
@@ -177,19 +178,29 @@ struct PlayerView: View {
             Button("OK", role: .cancel) { importMessage = nil }
         } message: { Text(importMessage ?? "") }
         .onAppear {
-            if let document { player.load(document) }
-            player.setSubtitles(segments)
+            if !didLoadInitialDocument {
+                didLoadInitialDocument = true
+                if let selected = documents.first(where: { $0.id == documentID }) { player.load(selected) }
+            }
+            reloadSegments()
         }
-        .onChange(of: segments.map(\.id)) { _, _ in player.setSubtitles(segments) }
+        .onChange(of: player.documentID) { _, _ in
+            savedSegments = nil
+            vocabularyMessage = nil
+            following = true
+            reloadSegments()
+        }
+        .onChange(of: transcripts.map(\.id)) { _, _ in reloadSegments() }
+        .onChange(of: allSegments.count) { _, _ in reloadSegments() }
         .onChange(of: Int(player.currentTime / 5)) { _, _ in
-            if player.documentID == documentID, let document {
+            if player.documentID == currentDocumentID, let document {
                 document.lastPlaybackTime = player.currentTime
                 document.lastPlayedAt = .now
                 try? modelContext.save()
             }
         }
         .onDisappear {
-            if player.documentID == documentID, let document {
+            if player.documentID == currentDocumentID, let document {
                 document.lastPlaybackTime = player.currentTime
                 document.lastPlayedAt = .now
                 try? modelContext.save()
@@ -241,13 +252,30 @@ struct PlayerView: View {
         return String(format: "%d:%02d", value / 60, value % 60)
     }
 
-    private func addWord(_ word: String, from segment: SubtitleSegment) {
+    private func reloadSegments() {
+        guard let transcript else {
+            savedSegments = []
+            player.setSubtitles([])
+            return
+        }
+        let loaded = allSegments.filter { $0.transcriptID == transcript.id }
+            .sorted { $0.startTime < $1.startTime }
+        savedSegments = loaded
+        player.setSubtitles(loaded)
+    }
+
+    private func toggleWord(_ word: String, from segment: SubtitleSegment) {
         let dictionary = OfflineDictionary.shared
         let lemma = dictionary.lemma(for: word)
         do {
-            let existing = try modelContext.fetch(FetchDescriptor<VocabularyItem>())
-            guard !existing.contains(where: { dictionary.lemma(for: $0.lemma) == lemma }) else {
-                vocabularyMessage = "Already saved: \(word)"
+            if let existing = vocabulary.first(where: { dictionary.lemma(for: $0.lemma) == lemma }) {
+                let records = try modelContext.fetch(FetchDescriptor<ReviewRecord>())
+                    .filter { $0.vocabularyID == existing.id }
+                for record in records { modelContext.delete(record) }
+                modelContext.delete(existing)
+                try modelContext.save()
+                vocabularyMessage = "Removed: \(word)"
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
                 return
             }
             let entry = dictionary.lookup(word)
@@ -257,7 +285,7 @@ struct PlayerView: View {
                                       partOfSpeech: entry?.pos,
                                       chineseMeaning: entry?.translation.replacingOccurrences(of: "\\n", with: "\n") ?? "暂无词典释义",
                                       englishDefinition: entry?.definition.replacingOccurrences(of: "\\n", with: "\n") ?? "",
-                                      originalSentence: segment.english, sourceAudioID: documentID,
+                                      originalSentence: segment.english, sourceAudioID: currentDocumentID,
                                       reviewStage: state.stage, nextReviewDate: state.nextReviewDate)
             item.originalTranslation = segment.chinese
             item.originalStartTime = segment.startTime
@@ -277,7 +305,7 @@ struct PlayerView: View {
             let text = try AudioStorage.readTranscript(from: url)
             let parsed = TranscriptParser.parse(text)
             guard !parsed.isEmpty else { throw TranscriptImportError.noTimedSegments }
-            try saveTranscript(parsed, source: "imported")
+            try saveTranscript(parsed, source: "imported", for: currentDocumentID)
             mode = .bilingual
             importMessage = "Imported \(parsed.count) timed subtitles for this audio."
         } catch {
@@ -288,13 +316,14 @@ struct PlayerView: View {
 
     private func generateTranscript() {
         guard let document else { return }
+        let targetID = document.id
         transcribing = true
         Task {
             do {
                 let parsed = try await OnDeviceTranscriptionService().transcribe(
                     AudioStorage.url(for: document.localRelativePath)
                 )
-                try saveTranscript(parsed, source: "on-device")
+                try saveTranscript(parsed, source: "on-device", for: targetID)
             } catch {
                 modelContext.rollback()
                 errorMessage = error.localizedDescription
@@ -305,13 +334,14 @@ struct PlayerView: View {
 
     private func remoteTranscribe() {
         guard let document else { return }
+        let targetID = document.id
         transcribing = true
         Task {
             do {
                 let parsed = try await BackendTranscriptionService().transcribe(
                     AudioStorage.url(for: document.localRelativePath)
                 )
-                try saveTranscript(parsed, source: "server")
+                try saveTranscript(parsed, source: "server", for: targetID)
             } catch {
                 modelContext.rollback()
                 errorMessage = error.localizedDescription
@@ -323,13 +353,14 @@ struct PlayerView: View {
     private func translate() {
         let untranslated = segments.filter { !$0.english.isEmpty && $0.chinese.isEmpty }
         guard !untranslated.isEmpty else { return }
+        let targetID = currentDocumentID
         translating = true
         Task {
             do {
                 let values = try await BackendTranslationService().translate(untranslated.map(\.english))
                 for (segment, value) in zip(untranslated, values) { segment.chinese = value }
                 try modelContext.save()
-                player.setSubtitles(segments)
+                if currentDocumentID == targetID { player.setSubtitles(segments) }
             } catch {
                 modelContext.rollback()
                 errorMessage = error.localizedDescription
@@ -338,8 +369,8 @@ struct PlayerView: View {
         }
     }
 
-    private func saveTranscript(_ parsed: [ParsedSubtitle], source: String) throws {
-        let transcript = Transcript(audioDocumentID: documentID, source: source)
+    private func saveTranscript(_ parsed: [ParsedSubtitle], source: String, for targetID: UUID) throws {
+        let transcript = Transcript(audioDocumentID: targetID, source: source)
         modelContext.insert(transcript)
         var inserted: [SubtitleSegment] = []
         for item in parsed {
@@ -351,9 +382,11 @@ struct PlayerView: View {
             inserted.append(segment)
         }
         try modelContext.save()
-        savedSegments = inserted.sorted { $0.startTime < $1.startTime }
-        player.setSubtitles(savedSegments ?? [])
-        following = true
+        if currentDocumentID == targetID {
+            savedSegments = inserted.sorted { $0.startTime < $1.startTime }
+            player.setSubtitles(savedSegments ?? [])
+            following = true
+        }
     }
 }
 
