@@ -241,6 +241,10 @@ struct PlayerView: View {
                 }
                 Spacer()
                 AirPlayButton().frame(width: 36, height: 36)
+                Picker("Playback Mode", selection: $player.playbackMode) {
+                    ForEach(PlaybackMode.allCases) { option in Text(option.label).tag(option) }
+                }
+                .pickerStyle(.menu)
             }
         }
         .padding(.horizontal, 20)

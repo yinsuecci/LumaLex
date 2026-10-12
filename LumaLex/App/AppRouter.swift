@@ -18,11 +18,15 @@ struct AppRouter: View {
                 try MediaCleanupService.clearExistingMediaOnce(in: modelContext)
                 try DemoContentSeeder.seedIfNeeded(in: modelContext)
                 mediaReady = true
+                player.configurePersistence(in: modelContext)
                 player.setQueue(audio)
                 await importBatch()
+                player.setQueue(try modelContext.fetch(FetchDescriptor<AudioDocument>(sortBy: [SortDescriptor(\AudioDocument.importedAt, order: .reverse)])))
+                player.restoreLastDocument()
             } catch { setupError = error.localizedDescription }
         }
         .onChange(of: scenePhase) { _, phase in
+            if phase != .active { player.saveProgress() }
             if phase == .active && mediaReady { Task { await importBatch() } }
         }
         .onChange(of: audio.map(\.id)) { _, _ in player.setQueue(audio) }

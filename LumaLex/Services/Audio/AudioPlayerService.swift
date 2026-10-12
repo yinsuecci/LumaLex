@@ -1,5 +1,6 @@
 import AVFoundation
 import MediaPlayer
+import SwiftData
 import SwiftUI
 
 @MainActor
@@ -9,6 +10,30 @@ final class AudioPlayerService: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
+    @Published var playbackMode = PlaybackMode(rawValue: UserDefaults.standard.string(forKey: "playbackMode") ?? "") ?? .sequential {
+        didSet { UserDefaults.standard.set(playbackMode.rawValue, forKey: "playbackMode") }
+    }
+    private var modelContext: ModelContext?
+    private var currentDocument: AudioDocument?
+    private var lastCheckpoint = -1
+
+    func configurePersistence(in context: ModelContext) { modelContext = context }
+
+    func saveProgress() {
+        guard let currentDocument else { return }
+        currentDocument.lastPlaybackTime = currentTime
+        currentDocument.lastPlayedAt = .now
+        UserDefaults.standard.set(currentDocument.id.uuidString, forKey: "lastAudioDocumentID")
+        try? modelContext?.save()
+    }
+
+    func restoreLastDocument() {
+        guard documentID == nil else { return }
+        let stored = UserDefaults.standard.string(forKey: "lastAudioDocumentID").flatMap { UUID(uuidString: $0) }
+        let document = queue.first { $0.id == stored } ?? queue.filter { $0.lastPlayedAt != nil }
+            .max { ($0.lastPlayedAt ?? .distantPast) < ($1.lastPlayedAt ?? .distantPast) }
+        if let document { load(document) }
+    }
     @Published var rate: Float = 1 {
         didSet { if isPlaying { player?.rate = rate }; updateNowPlaying() }
     }
@@ -43,15 +68,31 @@ final class AudioPlayerService: ObservableObject {
         let player = AVPlayer(playerItem: item)
         self.player = player
         documentID = document.id
+        currentDocument = document
+        lastCheckpoint = -1
         title = document.title
         duration = document.duration
         seek(to: position ?? document.lastPlaybackTime)
+        if let modelContext {
+            let transcripts = (try? modelContext.fetch(FetchDescriptor<Transcript>())) ?? []
+            if let transcript = transcripts.filter({ $0.audioDocumentID == document.id }).max(by: { $0.createdAt < $1.createdAt }) {
+                let segments = (try? modelContext.fetch(FetchDescriptor<SubtitleSegment>())) ?? []
+                setSubtitles(segments.filter { $0.transcriptID == transcript.id }.sorted { $0.startTime < $1.startTime })
+            }
+        }
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             Task { @MainActor in
                 guard time.seconds.isFinite else { return }
                 self?.currentTime = time.seconds
+                if let self, self.isPlaying {
+                    let checkpoint = Int(time.seconds / 5)
+                    if checkpoint != self.lastCheckpoint {
+                        self.lastCheckpoint = checkpoint
+                        self.saveProgress()
+                    }
+                }
                 self?.updateSubtitleActivity()
             }
         }
@@ -69,16 +110,19 @@ final class AudioPlayerService: ObservableObject {
 
     private func handlePlaybackEnded() {
         guard isPlaying, let documentID else { return }
-        if let index = queue.firstIndex(where: { $0.id == documentID }),
-           let next = queue.dropFirst(index + 1).first(where: {
-               FileManager.default.fileExists(atPath: AudioStorage.url(for: $0.localRelativePath).path)
-           }) {
+        if playbackMode == .repeatOne { restartCurrentArticle(); return }
+        let available = queue.filter { FileManager.default.fileExists(atPath: AudioStorage.url(for: $0.localRelativePath).path) }
+        if let index = available.firstIndex(where: { $0.id == documentID }),
+           let nextIndex = playbackMode.nextIndex(after: index, count: available.count) {
+            let next = available[nextIndex]
+            if next.id == documentID { restartCurrentArticle(); return }
             load(next, startAt: 0)
             togglePlayback()
         } else {
             player?.pause()
             isPlaying = false
             currentTime = duration
+            saveProgress()
             updateNowPlaying()
             liveActivity.end()
         }
@@ -93,6 +137,7 @@ final class AudioPlayerService: ObservableObject {
             player.rate = rate
         }
         isPlaying.toggle()
+        saveProgress()
         updateNowPlaying()
         updateSubtitleActivity(force: true)
     }
@@ -101,6 +146,7 @@ final class AudioPlayerService: ObservableObject {
         let bounded = min(max(0, seconds), duration)
         player?.seek(to: CMTime(seconds: bounded, preferredTimescale: 600))
         currentTime = bounded
+        saveProgress()
         updateNowPlaying()
         updateSubtitleActivity()
     }
@@ -108,6 +154,8 @@ final class AudioPlayerService: ObservableObject {
     func skip(_ seconds: TimeInterval) { seek(to: currentTime + seconds) }
 
     func stop() {
+        saveProgress()
+        currentDocument = nil
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
         timeObserver = nil
         if let endObserver { NotificationCenter.default.removeObserver(endObserver) }
@@ -130,6 +178,19 @@ final class AudioPlayerService: ObservableObject {
         lastSubtitleIndex = nil
         lastMetadataSubtitleIndex = nil
         updateSubtitleActivity()
+    }
+
+    private func restartCurrentArticle() {
+        let id = documentID
+        player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
+            Task { @MainActor in
+                guard completed, let self, self.documentID == id, self.isPlaying else { return }
+                self.currentTime = 0
+                self.saveProgress()
+                self.player?.rate = self.rate
+                self.updateSubtitleActivity(force: true)
+            }
+        }
     }
 
     func refreshLockScreenPresentation() {

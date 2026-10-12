@@ -52,6 +52,10 @@ struct VocabularyView: View {
                                     .font(.headline)
                                 Text(item.chineseMeaning)
                                     .foregroundStyle(.secondary)
+                                if !item.originalSentence.isEmpty {
+                                    Text(item.originalSentence).font(.subheadline)
+                                        .foregroundStyle(.secondary).lineLimit(3)
+                                }
                             }
                         }
                         .accessibilityElement(children: .combine)
