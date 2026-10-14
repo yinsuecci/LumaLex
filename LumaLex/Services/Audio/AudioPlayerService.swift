@@ -89,12 +89,13 @@ final class AudioPlayerService: ObservableObject {
                 setSubtitles(segments.filter { $0.transcriptID == transcript.id }.sorted { $0.startTime < $1.startTime })
             }
         }
+        let endingDocumentID = document.id
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
             Task { @MainActor in
                 guard time.seconds.isFinite else { return }
-                guard self?.documentID == document.id, self?.isSeeking == false else { return }
+                guard self?.documentID == endingDocumentID, self?.isSeeking == false else { return }
                 self?.currentTime = time.seconds
                 if let self, self.isPlaying {
                     let checkpoint = Int(time.seconds / 5)
@@ -106,7 +107,6 @@ final class AudioPlayerService: ObservableObject {
                 self?.updateSubtitleActivity()
             }
         }
-        let endingDocumentID = document.id
         endObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime, object: item, queue: .main
         ) { [weak self] _ in

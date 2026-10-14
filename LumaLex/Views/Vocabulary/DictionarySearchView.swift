@@ -22,7 +22,7 @@ struct DictionarySearchView: View {
             Section {
                 TextField("English word or phrase", text: $query)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                    .submitLabel(.search).onSubmit(perform: search)
+                    .submitLabel(.search).onSubmit { search() }
                     .onChange(of: query) { _, _ in entry = nil; example = nil; searched = false }
                 Button("Look Up", systemImage: "magnifyingglass", action: search)
                     .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
