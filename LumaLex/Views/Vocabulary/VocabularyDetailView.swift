@@ -20,11 +20,13 @@ struct VocabularyDetailView: View {
                     Text("Dictionary: \(source)").font(.caption).foregroundStyle(.secondary)
                 }
             }
+            if !item.originalSentence.isEmpty {
             Section("Original Example") {
-                Text(item.originalSentence).italic()
+                HighlightedExample(sentence: item.originalSentence, word: item.word, lemma: item.lemma).italic()
                 if let translation = item.originalTranslation, !translation.isEmpty {
                     Text(translation).foregroundStyle(.secondary)
                 }
+            }
             }
             Section("Progress") {
                 LabeledContent("Status", value: item.status == .learned ? "Learned" : "Learning")

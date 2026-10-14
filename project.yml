@@ -28,7 +28,7 @@ targets:
       path: LumaLex/Info.plist
       properties:
         UILaunchScreen: {}
-        CFBundleVersion: "9"
+        CFBundleVersion: "10"
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         CFBundleDisplayName: LumaLex
@@ -58,7 +58,7 @@ targets:
       path: Widgets/Info.plist
       properties:
         CFBundleDisplayName: LumaLex
-        CFBundleVersion: "9"
+        CFBundleVersion: "10"
         NSExtension:
           NSExtensionPointIdentifier: com.apple.widgetkit-extension
     settings:

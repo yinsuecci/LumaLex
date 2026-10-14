@@ -33,6 +33,7 @@ struct PlayerView: View {
     @State private var savedSegments: [SubtitleSegment]?
     @State private var importMessage: String?
     @State private var didLoadInitialDocument = false
+    @State private var showingDictionary = false
     let documentID: UUID
 
     private var currentDocumentID: UUID { player.documentID ?? documentID }
@@ -137,12 +138,22 @@ struct PlayerView: View {
         .navigationTitle("Player")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            Button("Look Up Word", systemImage: "magnifyingglass") { showingDictionary = true }
             Button("Import Subtitles", systemImage: "text.badge.plus") { importingTranscript = true }
             if !segments.isEmpty {
                 Button("Retranscribe", systemImage: "waveform.badge.mic") { generateTranscript() }
                     .disabled(transcribing)
                 Button("Translate", systemImage: "character.book.closed") { confirmTranslation = true }
                     .disabled(translating || BackendConfiguration.baseURL == nil)
+            }
+        }
+        .sheet(isPresented: $showingDictionary) {
+            NavigationStack {
+                DictionarySearchView(preferredExample: activeIndex.map { index in
+                    VocabularyExample(sentence: segments[index].english, translation: segments[index].chinese,
+                                      audioID: currentDocumentID, startTime: segments[index].startTime)
+                })
+                .toolbar { Button("Done") { showingDictionary = false } }
             }
         }
         .confirmationDialog("Send this audio to your configured server for transcription?",
@@ -214,6 +225,10 @@ struct PlayerView: View {
                 ForEach(SubtitleMode.allCases) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.menu)
+
+            Toggle("Each sentence twice", isOn: $player.repeatSentences)
+                .disabled(segments.isEmpty)
+                .font(.subheadline)
 
             Slider(value: Binding(get: { player.currentTime }, set: { player.seek(to: $0) }),
                    in: 0...max(player.duration, 1))

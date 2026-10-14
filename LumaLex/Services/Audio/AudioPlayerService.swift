@@ -13,6 +13,15 @@ final class AudioPlayerService: ObservableObject {
     @Published var playbackMode = PlaybackMode(rawValue: UserDefaults.standard.string(forKey: "playbackMode") ?? "") ?? .sequential {
         didSet { UserDefaults.standard.set(playbackMode.rawValue, forKey: "playbackMode") }
     }
+    @Published var repeatSentences = UserDefaults.standard.bool(forKey: "repeatSentences") {
+        didSet {
+            UserDefaults.standard.set(repeatSentences, forKey: "repeatSentences")
+            configureSentenceRepeat(restartSentence: repeatSentences)
+        }
+    }
+    private var sentenceRepeat = SentenceRepeatState()
+    private var seekGeneration = 0
+    private var isSeeking = false
     private var modelContext: ModelContext?
     private var currentDocument: AudioDocument?
     private var lastCheckpoint = -1
@@ -85,6 +94,7 @@ final class AudioPlayerService: ObservableObject {
         ) { [weak self] time in
             Task { @MainActor in
                 guard time.seconds.isFinite else { return }
+                guard self?.documentID == document.id, self?.isSeeking == false else { return }
                 self?.currentTime = time.seconds
                 if let self, self.isPlaying {
                     let checkpoint = Int(time.seconds / 5)
@@ -110,6 +120,20 @@ final class AudioPlayerService: ObservableObject {
 
     private func handlePlaybackEnded() {
         guard isPlaying, let documentID else { return }
+        guard !isSeeking else { return }
+        if repeatSentences, let index = sentenceRepeat.index, subtitles.indices.contains(index) {
+            let endedAt = min(subtitles[index].end, duration)
+            if let target = sentenceRepeat.advance(subtitles: subtitles) {
+                applySentenceEnd()
+                seekPrecisely(to: target)
+                return
+            }
+            applySentenceEnd()
+            if endedAt < duration - 0.05 {
+                seekPrecisely(to: endedAt)
+                return
+            }
+        }
         if playbackMode == .repeatOne { restartCurrentArticle(); return }
         let available = queue.filter { FileManager.default.fileExists(atPath: AudioStorage.url(for: $0.localRelativePath).path) }
         if let index = available.firstIndex(where: { $0.id == documentID }),
@@ -144,16 +168,17 @@ final class AudioPlayerService: ObservableObject {
 
     func seek(to seconds: TimeInterval) {
         let bounded = min(max(0, seconds), duration)
-        player?.seek(to: CMTime(seconds: bounded, preferredTimescale: 600))
-        currentTime = bounded
-        saveProgress()
-        updateNowPlaying()
-        updateSubtitleActivity()
+        sentenceRepeat.reset(at: bounded, subtitles: subtitles)
+        applySentenceEnd()
+        seekPrecisely(to: bounded)
     }
 
     func skip(_ seconds: TimeInterval) { seek(to: currentTime + seconds) }
 
     func stop() {
+        seekGeneration += 1
+        isSeeking = false
+        sentenceRepeat = SentenceRepeatState()
         saveProgress()
         currentDocument = nil
         if let timeObserver { player?.removeTimeObserver(timeObserver) }
@@ -173,22 +198,51 @@ final class AudioPlayerService: ObservableObject {
     }
 
     func setSubtitles(_ segments: [SubtitleSegment]) {
-        subtitles = segments.map { ParsedSubtitle(start: $0.startTime, end: $0.endTime,
+        let parsed = segments.map { ParsedSubtitle(start: $0.startTime, end: $0.endTime,
                                                    english: $0.english, chinese: $0.chinese) }
+        guard parsed != subtitles else { return }
+        subtitles = parsed
+        configureSentenceRepeat(restartSentence: false)
         lastSubtitleIndex = nil
         lastMetadataSubtitleIndex = nil
         updateSubtitleActivity()
     }
 
     private func restartCurrentArticle() {
-        let id = documentID
-        player?.seek(to: .zero, toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
+        seek(to: 0)
+    }
+
+    private func configureSentenceRepeat(restartSentence: Bool) {
+        sentenceRepeat.reset(at: currentTime, subtitles: subtitles)
+        applySentenceEnd()
+        if restartSentence, let index = sentenceRepeat.index {
+            seekPrecisely(to: subtitles[index].start)
+        }
+    }
+
+    private func applySentenceEnd() {
+        guard let item = player?.currentItem else { return }
+        if repeatSentences, let index = sentenceRepeat.index, subtitles.indices.contains(index) {
+            item.forwardPlaybackEndTime = CMTime(seconds: min(subtitles[index].end, duration), preferredTimescale: 600)
+        } else { item.forwardPlaybackEndTime = .invalid }
+    }
+
+    private func seekPrecisely(to target: TimeInterval) {
+        guard let player else { return }
+        let bounded = min(max(0, target), duration)
+        seekGeneration += 1
+        let generation = seekGeneration
+        isSeeking = true
+        currentTime = bounded
+        saveProgress()
+        updateSubtitleActivity(force: true)
+        player.seek(to: CMTime(seconds: bounded, preferredTimescale: 600),
+                    toleranceBefore: .zero, toleranceAfter: .zero) { [weak self] completed in
             Task { @MainActor in
-                guard completed, let self, self.documentID == id, self.isPlaying else { return }
-                self.currentTime = 0
-                self.saveProgress()
-                self.player?.rate = self.rate
-                self.updateSubtitleActivity(force: true)
+                guard let self, self.seekGeneration == generation else { return }
+                self.isSeeking = false
+                if completed, self.isPlaying { self.player?.rate = self.rate }
+                self.updateNowPlaying()
             }
         }
     }

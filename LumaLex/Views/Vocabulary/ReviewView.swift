@@ -39,7 +39,7 @@ struct ReviewView: View {
                             .font(.title3)
                         Text(word.englishDefinition)
                             .foregroundStyle(.secondary)
-                        Text(word.originalSentence)
+                        HighlightedExample(sentence: word.originalSentence, word: word.word, lemma: word.lemma)
                             .italic()
                     }
                     .multilineTextAlignment(.center)

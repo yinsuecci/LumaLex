@@ -53,7 +53,7 @@ struct VocabularyView: View {
                                 Text(item.chineseMeaning)
                                     .foregroundStyle(.secondary)
                                 if !item.originalSentence.isEmpty {
-                                    Text(item.originalSentence).font(.subheadline)
+                                    HighlightedExample(sentence: item.originalSentence, word: item.word, lemma: item.lemma).font(.subheadline)
                                         .foregroundStyle(.secondary).lineLimit(3)
                                 }
                             }
@@ -65,6 +65,11 @@ struct VocabularyView: View {
             }
         }
         .navigationTitle("Vocabulary")
+        .toolbar {
+            NavigationLink {
+                DictionarySearchView()
+            } label: { Label("Look Up Word", systemImage: "magnifyingglass") }
+        }
         .searchable(text: $searchText)
         .alert("Could Not Delete Word", isPresented: Binding(get: { errorMessage != nil },
                                                               set: { if !$0 { errorMessage = nil } })) {
